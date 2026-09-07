@@ -10,5 +10,5 @@ class Currency extends Model
     /** @use HasFactory<\Database\Factories\CurrencyFactory> */
     use HasFactory;
 
-    protected $fillable = ['target_asset', 'base_asset', 'value'];
+    protected $fillable = ['target_asset', 'base_asset', 'value', 'created_at', 'updated_at'];
 }

@@ -11,25 +11,24 @@ class QueryCOPTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_it_stores_the_latest_trm_converted_using_the_stored_usdt_value(): void
+    public function test_it_stores_the_latest_cop_usd_trm(): void
     {
-        Currency::create(['asset' => 'USDT', 'value' => 36.50]);
-
         Http::fake([
             'https://www.datos.gov.co/resource/32sa-8pi3.json*' => Http::response([
                 ['valor' => '4000.25', 'vigenciadesde' => '2026-09-03T00:00:00.000'],
             ]),
         ]);
 
-        $this->artisan('app:query-c-o-p')
+        $this->artisan('app:queryCOP')
             ->assertExitCode(0);
 
         $this->assertDatabaseHas('currencies', [
-            'asset' => 'COP',
-            'value' => '146009.13',
+            'base_asset' => 'COP',
+            'target_asset' => 'USD',
+            'value' => '4000.25',
         ]);
 
-        Http::assertSent(fn ($request) => $request->url() === 'https://www.datos.gov.co/resource/32sa-8pi3.json'
+        Http::assertSent(fn ($request) => str_starts_with($request->url(), 'https://www.datos.gov.co/resource/32sa-8pi3.json')
             && $request['$limit'] === 1
             && $request['$order'] === 'vigenciadesde DESC');
     }

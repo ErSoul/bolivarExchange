@@ -24,19 +24,21 @@ class QueryBCVTest extends TestCase
             ->assertExitCode(0);
 
         $this->assertDatabaseHas('currencies', [
-            'asset' => 'USD',
+            'base_asset' => 'VES',
+            'target_asset' => 'USD',
             'value' => '801.1752',
         ]);
 
         $this->assertDatabaseHas('currencies', [
-            'asset' => 'EUR',
+            'base_asset' => 'VES',
+            'target_asset' => 'EUR',
             'value' => '929.09083243',
         ]);
 
         Http::assertSentCount(1);
         Http::assertSent(fn ($request) => $request->url() === 'https://bcv.org.ve');
 
-        $this->assertEquals(801.1752, (float) Currency::where('asset', 'USD')->value('value'));
-        $this->assertEquals(929.09083243, (float) Currency::where('asset', 'EUR')->value('value'));
+        $this->assertEquals(801.1752, (float) Currency::where('target_asset', 'USD')->value('value'));
+        $this->assertEquals(929.09083243, (float) Currency::where('target_asset', 'EUR')->value('value'));
     }
 }

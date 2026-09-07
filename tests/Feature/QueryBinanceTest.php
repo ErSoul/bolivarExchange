@@ -21,13 +21,14 @@ class QueryBinanceTest extends TestCase
             ->assertExitCode(0);
 
         $this->assertDatabaseHas('currencies', [
-            'asset' => 'USDT',
+            'base_asset' => 'VES',
+            'target_asset' => 'USDT',
             'value' => '15.50',
         ]);
 
         Http::assertSentCount(2);
         Http::assertSent(fn ($request) => $request['tradeType'] === 'BUY' && $request['rows'] === 10);
         Http::assertSent(fn ($request) => $request['tradeType'] === 'SELL' && $request['rows'] === 10);
-        $this->assertEquals(15.5, Currency::where('asset', 'USDT')->value('value'));
+        $this->assertEquals(15.5, Currency::where('target_asset', 'USDT')->value('value'));
     }
 }

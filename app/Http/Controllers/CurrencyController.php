@@ -2,65 +2,98 @@
 
 namespace App\Http\Controllers;
 
+use App\General\Currency as CurrencyAsset;
 use App\Models\Currency;
-use App\Http\Requests\StoreCurrencyRequest;
-use App\Http\Requests\UpdateCurrencyRequest;
+use App\Services\CurrencyMarketService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 class CurrencyController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
+    public function __construct(
+        protected CurrencyMarketService $currencyMarketService
+    ) {}
+
     public function index()
     {
-        //
+        $quotes = $this->latestQuotes();
+        $historicalQuotes = Currency::query()->oldest('created_at')->get();
+        $currencies = $this->currencyMarketService->getCurrenciesForDisplay($quotes);
+        $historicalSeries = $this->currencyMarketService->getHistoricalAssetSeries($historicalQuotes);
+        $historicalCopSeries = $this->currencyMarketService->getHistoricalCopSeries($historicalQuotes);
+
+        return view('welcome', [
+            'currencies' => $currencies,
+            'updatedAt' => $quotes->max('created_at'),
+            'historicalSeries' => $historicalSeries,
+            'historicalCopSeries' => $historicalCopSeries,
+        ]);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function apiIndex(Request $request): JsonResponse
     {
-        //
+        $quotes = $this->latestQuotes();
+        $assets = $this->parseAssets($request->query('assets'));
+        $from = strtoupper((string) $request->query('from', CurrencyAsset::USD->value));
+        $to = strtoupper((string) $request->query('to', CurrencyAsset::VES->value));
+        $amount = (float) $request->query('amount', 1);
+
+        $currencies = $this->currencyMarketService->getCurrenciesForDisplay($quotes);
+
+        if ($assets !== []) {
+            $currencies = $currencies->filter(fn (array $currency) => in_array($currency['code'], $assets, true));
+        }
+
+        $conversion = $this->buildConversion($quotes, $from, $to, $amount);
+
+        return response()->json([
+            'updated_at' => $quotes->max('created_at')?->toISOString(),
+            'currencies' => $currencies->values()->all(),
+            'conversion' => $conversion,
+        ], 200, [], JSON_PRESERVE_ZERO_FRACTION);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(StoreCurrencyRequest $request)
+    protected function latestQuotes()
     {
-        //
+        return Currency::query()->latest('created_at')->get()
+            ->unique(fn (Currency $quote) => $quote->base_asset . ':' . $quote->target_asset)
+            ->values();
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(Currency $currency)
+    protected function parseAssets(?string $assets): array
     {
-        //
+        if (blank($assets)) {
+            return [];
+        }
+
+        return collect(explode(',', $assets))
+            ->map(fn (string $asset) => strtoupper(trim($asset)))
+            ->filter()
+            ->values()
+            ->all();
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(Currency $currency)
+    protected function buildConversion(Collection $quotes, string $from, string $to, float $amount): array
     {
-        //
+        if ($from === $to) {
+            return [
+                'from' => $from,
+                'to' => $to,
+                'amount' => $amount,
+                'value' => $amount,
+            ];
+        }
+
+        $rate = $this->currencyMarketService->resolveRate($quotes, $from, $to);
+
+        return [
+            'from' => $from,
+            'to' => $to,
+            'amount' => $amount,
+            'value' => $rate === null ? null : $amount * $rate,
+        ];
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(UpdateCurrencyRequest $request, Currency $currency)
-    {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(Currency $currency)
-    {
-        //
-    }
 }
+
