@@ -28,14 +28,10 @@ class QueryBCV extends Command
     public function handle()
     {
         $response = Http::withOptions([
-                    'verify' => config('app.ssl_verification'),
-                    'curl' => [
-                        CURLOPT_SSL_VERIFYPEER => config('app.ssl_verification'),
-                        CURLOPT_SSL_VERIFYHOST => config('app.ssl_verification') ? 2 : 0,
-                    ],
-                ])->get('https://bcv.org.ve');
+            'verify' => config('app.ssl_verification'),
+        ])->get('https://bcv.org.ve');
 
-        $dom = new \DOMDocument();
+        $dom = new \DOMDocument;
         libxml_use_internal_errors(true);
         $dom->loadHTML($response->body(), LIBXML_NOERROR | LIBXML_NOWARNING);
         libxml_clear_errors();
@@ -54,17 +50,17 @@ class QueryBCV extends Command
 
         Currency::create(
             ['target_asset' => 'USD',
-             'base_asset' => 'VES',
-             'value' => (float)$dolarValueFormatted]
+                'base_asset' => 'VES',
+                'value' => (float) $dolarValueFormatted]
         );
 
         Currency::create(
             ['target_asset' => 'EUR',
-             'base_asset' => 'VES',
-             'value' => (float)$euroValueFormatted]
+                'base_asset' => 'VES',
+                'value' => (float) $euroValueFormatted]
         );
 
-        $this->info('Dólar (formateado): ' . (float)$dolarValueFormatted);
-        $this->info('Euro (formateado): ' . (float)$euroValueFormatted);
+        $this->info('Dólar (formateado): '.(float) $dolarValueFormatted);
+        $this->info('Euro (formateado): '.(float) $euroValueFormatted);
     }
 }
