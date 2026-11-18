@@ -20,47 +20,80 @@ class QueryBCV extends Command
      *
      * @var string
      */
-    protected $description = 'Command description';
+    protected $description = 'Query the latest USD/VES and EUR/VES rates from the BCV website.';
+
+    /**
+     * BCV element id => stored target asset.
+     *
+     * @var array<string, string>
+     */
+    private const RATES = [
+        'dolar' => 'USD',
+        'euro' => 'EUR',
+    ];
 
     /**
      * Execute the console command.
      */
-    public function handle()
+    public function handle(): int
     {
-        $response = Http::withOptions([
-            'verify' => config('app.ssl_verification'),
-        ])->get('https://bcv.org.ve');
+        try {
+            $response = Http::withOptions([
+                'verify' => config('app.ssl_verification'),
+            ])->timeout(30)->get('https://bcv.org.ve');
+        } catch (\Throwable $e) {
+            $this->error('BCV request error: '.$e->getMessage());
+
+            return self::FAILURE;
+        }
+
+        if (! $response->successful()) {
+            $this->error('BCV request failed: '.$response->status());
+
+            return self::FAILURE;
+        }
 
         $dom = new \DOMDocument;
         libxml_use_internal_errors(true);
         $dom->loadHTML($response->body(), LIBXML_NOERROR | LIBXML_NOWARNING);
         libxml_clear_errors();
 
-        $dolarElement = $dom->getElementById('dolar');
-        $euroElement = $dom->getElementById('euro');
+        $status = self::SUCCESS;
 
-        $dolarValue = $dolarElement ? $dolarElement->textContent : 'N/A';
-        $euroValue = $euroElement ? $euroElement->textContent : 'N/A';
+        foreach (self::RATES as $elementId => $asset) {
+            $rate = self::parseRate($dom->getElementById($elementId)?->textContent);
 
-        preg_match('/\d+,\d+/', $dolarValue, $matches);
-        $dolarValueFormatted = isset($matches[0]) ? str_replace(',', '.', $matches[0]) : 'N/A';
+            if ($rate === null) {
+                $this->error("Could not read the {$asset} rate from the BCV page.");
+                $status = self::FAILURE;
 
-        preg_match('/\d+,\d+/', $euroValue, $matches);
-        $euroValueFormatted = isset($matches[0]) ? str_replace(',', '.', $matches[0]) : 'N/A';
+                continue;
+            }
 
-        Currency::create(
-            ['target_asset' => 'USD',
+            Currency::create([
+                'target_asset' => $asset,
                 'base_asset' => 'VES',
-                'value' => (float) $dolarValueFormatted]
-        );
+                'value' => $rate,
+            ]);
 
-        Currency::create(
-            ['target_asset' => 'EUR',
-                'base_asset' => 'VES',
-                'value' => (float) $euroValueFormatted]
-        );
+            $this->info("{$asset}: {$rate} VES");
+        }
 
-        $this->info('Dólar (formateado): '.(float) $dolarValueFormatted);
-        $this->info('Euro (formateado): '.(float) $euroValueFormatted);
+        return $status;
+    }
+
+    /**
+     * Parse a BCV-formatted amount such as "1.007,38665582" or "916,6477".
+     * The dot is a thousands separator and the comma is the decimal separator.
+     */
+    public static function parseRate(?string $text): ?float
+    {
+        if ($text === null || ! preg_match('/\d{1,3}(?:\.\d{3})+,\d+|\d+,\d+/', $text, $matches)) {
+            return null;
+        }
+
+        $rate = (float) str_replace(['.', ','], ['', '.'], $matches[0]);
+
+        return $rate > 0 ? $rate : null;
     }
 }
