@@ -2,8 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Models\Currency;
 use App\General\Currency as CurrencyAsset;
+use App\Models\Currency;
+use App\Services\CurrencyMarketService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -160,6 +161,28 @@ class ExampleTest extends TestCase
             ->assertSee('cop-history-table')
             ->assertSee('VES / USDT')
             ->assertSee('3,19');
+    }
+
+    public function test_cop_history_table_shows_the_last_ten_days_newest_first(): void
+    {
+        foreach (range(1, 12) as $daysAgo) {
+            $date = now()->subDays($daysAgo)->setTime(12, 0);
+
+            Currency::create(['base_asset' => CurrencyAsset::VES->value, 'target_asset' => CurrencyAsset::USDT->value, 'value' => 100, 'created_at' => $date]);
+            Currency::create(['base_asset' => CurrencyAsset::COP->value, 'target_asset' => CurrencyAsset::USD->value, 'value' => 1000 + $daysAgo * 100, 'created_at' => $date]);
+        }
+
+        $series = app(CurrencyMarketService::class)->getHistoricalCopSeries(Currency::all());
+
+        $this->assertCount(10, $series);
+        $this->assertSame(now()->subDay()->format('d/m'), $series[0]['label']);
+        $this->assertSame(now()->subDays(10)->format('d/m'), $series[9]['label']);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSeeInOrder(array_map(fn ($daysAgo) => number_format(10 + $daysAgo, 2, ',', '.'), range(1, 10)))
+            ->assertDontSee('21,00')
+            ->assertDontSee('22,00');
     }
 
     public function test_dashboard_exposes_the_asset_converter(): void

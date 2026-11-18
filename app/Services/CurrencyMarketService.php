@@ -86,9 +86,11 @@ class CurrencyMarketService
     }
 
     /**
+     * Most recent days first, limited to the latest $limit days.
+     *
      * @return array<int, array{label: string, usdt_to_ves: float, cop_to_usd: float, ves_to_cop: float}>
      */
-    public function getHistoricalCopSeries(Collection $quotes): array
+    public function getHistoricalCopSeries(Collection $quotes, int $limit = 10): array
     {
         $usdtByDay = $quotes
             ->filter(fn ($quote) => $quote->base_asset === CurrencyAsset::VES->value && $quote->target_asset === CurrencyAsset::USDT->value)
@@ -100,7 +102,8 @@ class CurrencyMarketService
         return $usdtByDay
             ->keys()
             ->intersect($copByDay->keys())
-            ->sort()
+            ->sortDesc()
+            ->take($limit)
             ->map(function (string $day) use ($usdtByDay, $copByDay) {
                 $usdtToVes = (float) $usdtByDay[$day]->sortByDesc('created_at')->first()->value;
                 $copToUsd = (float) $copByDay[$day]->sortByDesc('created_at')->first()->value;
